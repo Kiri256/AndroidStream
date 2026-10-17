@@ -19,7 +19,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Gradle 失败，退出码 $LASTEXITCODE" }
     $artifactDirectory = Join-Path $projectRoot 'artifacts'
     New-Item -ItemType Directory -Path $artifactDirectory -Force | Out-Null
-    $artifactPath = Join-Path $artifactDirectory 'AndroidStream-0.1.30-test.apk'
+    $artifactPath = Join-Path $artifactDirectory 'AndroidStream-0.1.33-test.apk'
     Copy-Item -LiteralPath 'android\build\outputs\apk\debug\android-debug.apk' -Destination $artifactPath -Force
     Get-Item -LiteralPath $artifactPath | Select-Object FullName,Length
     Get-FileHash -LiteralPath $artifactPath -Algorithm SHA256 | Format-List Algorithm,Hash

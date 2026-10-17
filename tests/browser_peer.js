@@ -9,7 +9,7 @@ class PhoneSocket {
     window.__test.socket = this;
     setTimeout(() => {
       this.readyState = 1; this.onopen?.();
-      this.emit({type:'ready',device:this.geometry,mediaGeneration:this.generation});
+      this.emit({type:'ready',device:this.geometry,videoCodecs:['H264'],mediaGeneration:this.generation});
     }, 50);
   }
   emit(message) { this.onmessage?.({data:JSON.stringify(message)}); }
@@ -78,7 +78,7 @@ class PhoneSocket {
     this.emit({type:'reconfigure',mediaGeneration:this.generation});
     this.stopMedia();
     this.geometry = {...this.geometry,width,height,generation:this.generation};
-    this.emit({type:'ready',device:this.geometry,mediaGeneration:this.generation});
+    this.emit({type:'ready',device:this.geometry,videoCodecs:['H264'],mediaGeneration:this.generation});
   }
 }
 window.WebSocket = PhoneSocket;

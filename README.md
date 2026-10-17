@@ -1,8 +1,8 @@
 # AndroidStream
 
-在离线局域网中，用电脑浏览器查看和控制 Root 安卓手机。手机内置网页、信令、采集和输入服务，运行不依赖 ADB、互联网或电脑客户端。
+在离线局域网中，从电脑浏览器或 Windows 客户端查看和控制 Root 安卓手机。手机内置网页、信令、采集和输入服务，运行不依赖 ADB 或互联网。
 
-当前版本 **0.1.30-test**，目标设备为小米 15 / Android 16 / KernelSU。支持 Android 11 起，电脑使用最新版 Chrome 或 Edge。本版不再要求 codec 列表预先声明 Baseline，改由 MediaCodec 实际配置验证，未完成实机验收。
+当前版本 **0.1.33-test**，目标设备为小米 15 / Android 16 / KernelSU。支持 Android 11 起。网页可选择 H.264、H.265 或 AV1；连接时显示浏览器与手机的能力声明提示，并实际尝试所选编码。Windows 客户端可选 H.264 或 H.265。AV1/H.265 与浏览器、Windows 解码组合尚未完成实机验收。
 
 应用使用深蓝底、青绿色显示器与白色手机组成的矢量自适应图标，支持桌面形状裁切及 Android 13+ 主题单色图标；实际主题效果取决于启动器。
 
@@ -11,8 +11,10 @@
 1. 在手机 App 或通知中停止旧服务，再运行 `powershell -ExecutionPolicy Bypass -File scripts/install.ps1` 覆盖安装并启动 App。在 KernelSU 中允许 Root。
 2. 手机和电脑连接允许互访的同一局域网，打开 App，启动服务并等待 Root 就绪。
 3. 浏览器打开手机显示的完整地址 `http://手机IP:8080`。升级后强制刷新，确认页头版本。
-4. 网页自动连接；需要声音时勾选“播放手机内部音频”，需要文本时展开“输入文本”。连接后可点击“关闭手机屏幕”或“点亮手机屏幕”。
+4. 网页先选择 H.264、H.265 或 AV1，再点击“连接手机”；浏览器或手机不支持的编码会禁用。需要声音时勾选“播放手机内部音频”，需要文本时展开“输入文本”。连接后可点击“关闭手机屏幕”或“点亮手机屏幕”。
 5. 测试结束后点击手机 App 或通知的“停止”。升级或卸载前也要先停止服务。
+
+Windows 客户端位于 `windows-client/`。Windows x64 可直接运行 `artifacts/AndroidStream.Client-win-x64/AndroidStream.Client.exe`；也可在 Windows 10 1809+ 安装 FFmpeg 8.1 shared runtime（含 D3D11VA 支持）后运行 `dotnet run --project windows-client/AndroidStream.Client.csproj -c Release`。连接地址格式为 `ws://手机IP:8080/ws`；选择 H.265 需要手机有 H.265 Main Surface 硬编，电脑 GPU/驱动及 FFmpeg 必须能 D3D11VA 解码。客户端没有软件静默回退。发布版包含 .NET 运行时，但不包含 FFmpeg shared DLL；FFmpeg 包采用 LGPL-2.1-only，须单独安装并按其许可证分发。
 
 网络和媒体运行在独立 Root 进程。退出或划掉 App 不会主动停止共享；重新打开 App 会查询并接管现有服务，不会自动启动未运行的服务。管理通知若被系统清理，可重新打开 App 后停止。厂商仍可能限制 Root 子进程，需实测确认；App 电池优化豁免仅辅助管理界面保活。
 
@@ -22,14 +24,14 @@
 
 | 项目 | 当前实现 |
 | --- | --- |
-| 视频 | Surface 采集 → MediaCodec 硬编 → WebRTC，固定 H.264 Baseline |
-| 视频策略 | 使用手机当前逻辑显示尺寸和显示刷新率；原生组合不支持时明确报告尺寸、帧率、Level 或硬件码率约束；无应用层固定码率上限 |
+| 视频 | Surface 采集 → MediaCodec 硬编 → WebRTC；网页开放选择 H.264 Baseline、H.265 Main、AV1 Main 8-bit，Windows 客户端可选 H.264/H.265 |
+| 视频策略 | 使用手机当前逻辑显示尺寸和显示刷新率；尝试启动所选硬件编码器，由 MediaCodec 实际配置/启动结果判定支持；无应用层固定码率上限 |
 | 输入 | 单指点击、拖动、滚轮、导航、音量和可映射文本 |
 | 音频 | 内部播放采集，48 kHz 双声道 PCM16 → WebSocket → Web Audio |
 | 恢复 | 断线重连、旋转后重建视频、失焦和断线释放输入 |
 | 手机屏幕 | Root 请求关闭物理显示屏，保持系统逻辑唤醒；断开控制或停止服务时尝试恢复显示，ROM 兼容性待实测 |
 
-仅支持局域网 IPv4、单手机、单控制端。不提供用户视频配置、云服务、STUN/TURN 或公网穿透。不支持 H.265/AV1、多点触控、任意 Unicode 输入法、Opus、严格音画同步或文件传输。
+仅支持局域网 IPv4、单手机、单控制端。不提供用户视频参数配置、云服务、STUN/TURN 或公网穿透。网页始终开放 H.264、H.265 和 AV1 选项，并提示浏览器与手机的能力声明；所选格式会进入 WebRTC 协商和 MediaCodec 实际启动，不自动切换编码。浏览器未声明解码能力、手机没有对应的非软件 Surface 编码器，或 MediaCodec 实际配置/启动失败时会报错。不支持多点触控、任意 Unicode 输入法、Opus、严格音画同步或文件传输。
 
 按项目要求无配对码、登录和手机确认，同一局域网设备可直接连接控制。Host/Origin 校验不属于认证。网页、信令和 PCM 音频使用未加密的 HTTP/WS，视频与控制使用 WebRTC 内置加密。网络解析也在 Root 进程运行，固定路由和消息限制不能替代权限隔离；不提供任意 shell 或文件访问接口。
 
@@ -37,9 +39,9 @@
 
 视频使用手机主屏幕当前逻辑尺寸和当前显示模式刷新率，不固定 1920/60，也不修改手机分辨率或强制最高刷新率。完整显示模式（尺寸、旋转、刷新率及模式 ID）稳定两秒后才提交，避免模式切换期间连续重建。静止画面不保证持续输出与刷新率相同的帧数。
 
-Root 读取并保留系统显示参数。连接前检查硬件 Surface、原生尺寸、原生帧率、Baseline Level 和硬件码率范围；若任一项不支持原生组合，会报告具体失败约束，不自动缩放或降帧。应用不设固定码率上限，WebRTC sender 与编码目标使用硬件声明范围，并受 H.264 Level、WebRTC 拥塞控制和网络状况约束。实际硬件配置及手机端稳定性仍需实测。
+Root 读取并保留系统显示参数。连接时按所选编码寻找非软件 Surface 编码器；系统声明的尺寸、帧率、Profile/Level 和码率范围仅作提示与参数参考，不据此提前判定能否编码。MediaCodec 会按候选顺序逐个配置和启动，失败候选完整释放后继续尝试，全部失败时返回汇总错误；不自动缩放、降帧、切换编码或回退软件编码。应用不设固定码率上限，WebRTC sender 与编码目标使用硬件声明范围，并受 WebRTC 拥塞控制和网络状况约束。实际硬件配置及手机端稳定性仍需实测。
 
-选择能够满足原生尺寸、帧率及硬件最大码率范围的 H.264 Surface 硬编，使用该组合所需的 Baseline Level，并在 SDP 与 MediaCodec 配置中保持一致。应用不设固定码率上限；编码器和 WebRTC 带宽估计仍会按硬件能力及网络状态调节，H.264 Level 也会限制合法码率范围。
+网页连接前按 `RTCRtpReceiver.getCapabilities("video")` 获取浏览器能力，并在选项旁提示；手机 `ready` 消息中的 Surface 编码器列表也只用于提示，不拦截用户选择。用户选择的编码写入 offer 和 codec preferences。Windows 客户端在 offer 中指定 H.264 或 H.265。Root 按所选格式创建非软件 Surface 编码器，并以 MediaCodec 实际配置和启动结果判定能否工作；能力声明不符不再单独导致拒绝，实际失败时返回错误，不自动切换。应用不设固定码率上限；编码器和 WebRTC 带宽估计仍会按硬件能力及网络状态调节。设备能力声明不代表端到端编码与解码实测。
 
 ### 手机息屏
 
@@ -72,14 +74,14 @@ Root 读取并保留系统显示参数。连接前检查硬件 Surface、原生�
 | 切换 App 后断线 | 本版将网络与媒体移到独立 Root 进程；若仍复现，记录具体 App、网页错误和 Root 是否仍运行，不能仅凭 Root UID 判断不会被冻结 |
 | 横竖屏切换停顿 | 当前会释放旧编码器并重建视频，不保证无缝旋转 |
 | Root 服务不可用 | 检查 KernelSU 授权及启动日志，在手机停止再启动服务；版本不一致时也须先停止 |
-| 画面无法建立 | 查看网页错误，检查浏览器 H.264 和手机 Surface 硬编支持；无软件静默回退 |
-| 静止清晰、滑动模糊 | 查看滑动时接收码率、FPS、丢包与 RTT；码率受硬件能力、H.264 Level 和网络状况约束，实际清晰度仍需实测 |
+| 画面无法建立 | 查看网页错误，检查所选编码的浏览器 WebRTC 能力及手机 Surface 硬编支持；无软件静默回退 |
+| 静止清晰、滑动模糊 | 查看滑动时接收码率、FPS、丢包与 RTT；码率受硬件能力、所选编码级别和网络状况约束，实际清晰度仍需实测 |
 | 关闭屏幕后电脑也黑屏或停帧 | 点击“点亮手机屏幕”恢复；记录 ROM 和错误，物理息屏下的采集兼容性需实机确认 |
 | Audio 错误 | 音频关闭，视频可继续；ROM 或受保护内容可能限制内部音频采集 |
 
 ## 开发
 
-需要 JDK 17+、SDK Platform 36 和 Android Build Tools。当前环境为 Android Studio JBR 21、Build Tools 36.1.0。使用预编译 WebRTC AAR，无需本地 NDK、CMake 或 Rust。首次下载依赖需联网。
+Android 构建需要 JDK 17+、SDK Platform 36 和 Android Build Tools。当前环境为 Android Studio JBR 21、Build Tools 36.1.0。Windows 客户端目标 .NET 10 / Windows 10 1809+，使用 SIPSorcery 10.0.17、SIPSorceryMedia.FFmpeg 10.0.17 和 NAudio 2.2.1。客户端依赖 FFmpeg 8.1 shared DLL；该包为 LGPL-2.1-only，FFmpeg DLL 需单独安装，当前不随客户端打包。首次下载依赖需联网。
 
 ```powershell
 # 构建 APK，并运行 JUnit 和 Lint
@@ -91,11 +93,19 @@ powershell -ExecutionPolicy Bypass -File scripts/install.ps1
 # 浏览器回归
 python -m pip install -r tests/requirements.txt
 python tests/browser_smoke.py
+
+# 构建 Windows x64 客户端
+dotnet build windows-client/AndroidStream.Client.csproj -c Release
+
+# 发布 Windows x64 自包含单文件客户端（FFmpeg shared DLL 仍需单独安装）
+dotnet publish windows-client/AndroidStream.Client.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o artifacts/AndroidStream.Client-win-x64
 ```
 
 构建脚本自动查找 Android Studio JBR 和默认 SDK，也可设置 `JAVA_HOME`、`ANDROID_HOME`。APK 输出到 `artifacts/`。其他平台使用 `./gradlew :android:assembleDebug :android:testDebugUnitTest :android:lintDebug`。
 
 浏览器回归默认使用本机 Edge，可用 `ANDROIDSTREAM_BROWSER` 指定 Chromium 可执行文件。它使用真实浏览器 WebRTC 回环和模拟手机端，不替代实机测试。
+
+Windows 客户端默认请求 D3D11VA 硬件解码，并把解码画面复制到 WPF 显示缓冲；显示队列只保留最新帧。状态栏帧载荷码率不包含 RTP/IP/链路开销，FPS 表示实际解码显示帧数。FFmpeg DLL 缺失、D3D11VA 初始化或 HEVC 解码失败时会报错，不静默切换软件解码。
 
 Root 启动日志位于 App 私有目录 `files/root-daemon.log`，每次启动覆盖，仅用于故障排查。开发时可用 `adb shell run-as dev.androidstream cat files/root-daemon.log` 读取；运行服务不依赖 ADB。
 
@@ -104,10 +114,10 @@ Root 启动日志位于 App 私有目录 `files/root-daemon.log`，每次启动�
 ### 链路与代码
 
 ```text
-视频：Root 显示 → Surface → MediaCodec → 同进程 WebRTC → 浏览器 video
-音频：Root AudioRecord → 同进程 WebSocket → 浏览器 Web Audio
-控制：浏览器键鼠 → DataChannel → Root 输入注入
-网页：浏览器 ← HTTP / WS → Root 服务
+视频：Root 显示 → Surface → MediaCodec H.264/H.265/AV1 → 同进程 WebRTC → 网页所选 H.264/H.265/AV1 或 Windows H.264/H.265
+音频：Root AudioRecord → 同进程 WebSocket → 浏览器 Web Audio / Windows PCM 输出
+控制：浏览器或 Windows 键鼠 → DataChannel → Root 输入注入
+网页：浏览器 / Windows 客户端 ← HTTP / WS 信令与 PCM 音频 → Root 服务
 管理：普通 App ← 本机 IPC（状态 / 停止）→ Root 服务
 ```
 
@@ -177,30 +187,31 @@ Java 源码位于 `android/src/main/java/dev/androidstream/`：
 
 ### 当前结果
 
-2026-10-17，版本 0.1.30-test，versionCode 31：
+2026-10-17，版本 0.1.33-test，versionCode 34：
 
 | 检查 | 结果 |
 | --- | --- |
-| JUnit | 53 项通过，0 failures/errors；覆盖 H.264 Profile/Level 标志解析及显示模式去抖 |
-| Android Lint | 0 errors / 14 warnings |
-| Edge 155.0.4283.45 | HTTP WebRTC 视频、触控、导航、文本、PCM 音频、统计生命周期、静音和断开回环通过；手机信令/采集为模拟 |
-| APK | v2 签名和 zipalign 16 KiB 检查通过；网页资源已打包 |
-| 手机 | ADB 无设备；小米 15 / Android 16 / KernelSU 实机尚未验收 |
+| JUnit | 56 项通过；覆盖 H.264 Level、HEVC Main-tier Level、AV1 RTP level-index、协商格式与显示模式去抖 |
+| Android Lint | 0 errors，14 warnings |
+| 浏览器回归 | Edge 155 WebRTC 回环通过，默认 H.264，覆盖编码能力筛选、控制、音频及统计；手机端信令由模拟服务提供 |
+| Windows | x64 Release 与自包含发布构建通过，0 warnings/errors；本次未修改 Windows 客户端 |
+| APK | `artifacts/AndroidStream-0.1.33-test.apk`，14,187,749 字节 |
+| 手机 | ADB 无设备；H.264/H.265/AV1 Surface 编码、实际浏览器解码、音频及输入均待实机验收 |
 
-APK 大小 14,133,565 字节，SHA256：
+APK SHA256：
 
 ```text
-C5542B51904DD693A37717D20E2AEFA9B128B2F89C98FC502F77C80EF75544B3
+3EB321F7CF64384B38FC32FDED621E37C4530442828442D8977A58FDE767B762
 ```
 
 ### 待验证与验收
 
 仍需实测 CPU、温度、实际 FPS/码率、弱网、输入到画面延迟和长期稳定性。重点风险包括 Root 原生库加载和无界面 Context 兼容性、原生网络枚举、SELinux 下管理 IPC、旋转停顿、JNI/交接线程释放竞态、采集错误未携带媒体代次、PCM 丢块与音画漂移，以及 WakeLock 超时和厂商后台限制。Root 不保证绕过受保护内容或 ROM 限制。
 
-1. 检查原生尺寸与系统当前显示模式，分别测试 60 Hz、高刷新率、非整数刷新率（设备支持时）、横竖屏和系统分辨率切换；确认编码组件、请求／实际 FPS、H.264 Level 和错误提示；检查刷新率短时切换不重建、稳定约两秒后重建。验证点击、拖动、滚轮、导航、文本、失焦及按住时断网；检查输入无残留、第二控制端被拒绝。
+1. 检查原生尺寸与系统当前显示模式，分别测试 60 Hz、高刷新率、非整数刷新率（设备支持时）、横竖屏和系统分辨率切换；用网页当前浏览器声明支持的 H.264/H.265/AV1 选项及 Windows H.264/H.265 客户端确认编码组件、FPS、Profile/Level 和错误提示。检查刷新率短时切换不重建、稳定约两秒后重建；验证点击、拖动、滚轮、导航、文本、失焦及按住时断网，确认输入无残留且第二控制端被拒绝。
 2. 拖动或播放音频时连续旋转 20 次，快速切音频 20 次，隐藏/恢复网页并断线重连；检查坐标、重复声、线程和手机本地声音。
 3. 静止 10 秒后回主页、打开复杂 App、滚动 10 秒，记录接收码率、FPS、丢包、RTT 和缓冲，检查无应用层固定码率上限时的清晰度与关键帧卡顿，弱网时仍应回落。必要时使用 Perfetto 和浏览器外部 WebRTC 工具定位。
-4. 不使用小窗，切换多个 App；再退出或划掉管理 App，确认浏览器的视频、音频和控制是否持续。重新打开 App，确认地址和会话被接管且未重启采集；再测试启动过程中停止、反复启动/停止，以及停止后通知、监听和 Root 进程消失。
+4. 不使用小窗，切换多个 App；再退出或划掉管理 App，确认浏览器和 Windows 客户端的视频、音频和控制是否持续。重新打开 App，确认地址和会话被接管且未重启采集；再测试启动过程中停止、反复启动/停止，以及停止后通知、监听和 Root 进程消失。
 5. 终止 Root、撤销授权、断 Wi-Fi 或限速，检查错误、资源释放和恢复。
 6. 动态运行 30 分钟，记录 App/Root CPU、内存和温度；与相同场景、网络及媒体参数下的旧版对照，不把进程迁移等同于性能改善。
 7. 息屏后连续滑动、播放视频／内部音频、旋转和切换 App；测试手动亮屏、网页断开／刷新、控制通道中断、五秒心跳丢失及停止服务后的恢复。测试系统自动锁屏和本地电源键是否干扰；异常强杀时确认手机上的恢复操作可用。

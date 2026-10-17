@@ -75,9 +75,14 @@ def main():
             assert page.locator("#pair").count() == 0
             assert page.locator("#transport").count() == 0
             assert page.locator("canvas").count() == 0
+            assert page.locator("#video-codec").count() == 1
+            assert page.locator("#settings, #diagnostics, #session-config").count() == 0
+            assert page.locator("#video-codec").input_value() == "H264"
+            assert page.evaluate("""() => [...document.querySelector('#video-codec').options].every(option => !option.disabled)""")
+            page.locator('#connect').click()
             page.wait_for_function("() => document.getElementById('status').textContent === '已连接'", timeout=20000)
             page.wait_for_function("() => document.getElementById('video').videoWidth > 0 && control?.readyState === 'open' && motion?.readyState === 'open'", timeout=15000)
-            assert page.locator("select, #settings, #diagnostics, #session-config").count() == 0
+            assert page.evaluate("""() => [...document.querySelector('#video-codec').options].every(option => !option.disabled)""")
             assert page.evaluate("typeof sessionConfig === 'undefined'")
             page.locator('#screen-off').click()
             page.wait_for_function("() => window.__test.inputs.some(x => x.type === 'screen' && x.off === true)")
@@ -134,7 +139,7 @@ def main():
             page.locator("#textform button").click()
             page.wait_for_function("() => window.__test.inputs.some(x=>x.type==='text' && x.text==='hello')")
             page.wait_for_function("() => window.__test.audioPackets > 4 && audioSources.size > 0")
-            assert page.evaluate("!('codec' in window.__test.offers[0]) && !('profile' in window.__test.offers[0])")
+            assert page.evaluate("window.__test.offers[0].videoCodec === 'H264' && !('codec' in window.__test.offers[0]) && !('profile' in window.__test.offers[0])")
             assert page.evaluate("audioTime - audioContext.currentTime < .2"), "Audio buffering grew"
             page.evaluate("window.__test.originalSocket = ws; window.__test.originalPc = pc; window.__test.socket.rotate(2670,1200)")
             page.wait_for_function("() => document.getElementById('status').textContent === '已连接' && document.getElementById('video').videoWidth === 800", timeout=20000)

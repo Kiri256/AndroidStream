@@ -97,6 +97,13 @@ public final class VideoPolicy {
         }
         return remaining == 0 ? highest : 0;
     }
+    public static int hevcMainLevelIdc(int codecLevel) {
+        int[] flags = {1, 4, 16, 64, 256, 1024, 4096, 16384, 65536, 262144,
+                1048576, 4194304, 16777216};
+        int[] idcs = {30, 60, 63, 90, 93, 120, 123, 150, 153, 156, 180, 183, 186};
+        for (int i = 0; i < flags.length; i++) if (codecLevel == flags[i]) return idcs[i];
+        return 0;
+    }
     /** Validate our generated answer, not untrusted offer text or unrelated media sections. */
     static boolean answerSupportsLevel(String sdp, int required) {
         boolean video = false;
@@ -108,6 +115,16 @@ public final class VideoPolicy {
                 java.util.regex.Matcher match = profile.matcher(line);
                 if (match.find() && Integer.parseInt(match.group(1), 16) >= required) return true;
             }
+        }
+        return false;
+    }
+    static boolean answerSupportsCodec(String sdp, String codecName) {
+        java.util.regex.Pattern codec = java.util.regex.Pattern.compile("^a=rtpmap:\\d+\\s+"
+                + java.util.regex.Pattern.quote(codecName) + "/90000(?:\\s|$)", java.util.regex.Pattern.CASE_INSENSITIVE);
+        boolean video = false;
+        for (String line : sdp.split("\\r?\\n")) {
+            if (line.startsWith("m=")) video = line.startsWith("m=video ") && !line.startsWith("m=video 0 ");
+            if (video && codec.matcher(line).find()) return true;
         }
         return false;
     }

@@ -29,10 +29,10 @@ final class RtcSession implements AutoCloseable {
     private long inputWindow = System.nanoTime();
     private int inputs;
     private static boolean initialized;
-    RtcSession(CaptureBackend root, JSONObject geometry, Events events) throws Exception {
+    RtcSession(CaptureBackend root, JSONObject geometry, String codecName, Events events) throws Exception {
         this.root = root; this.events = events;
         float displayRate = VideoPolicy.refreshRate(geometry.getDouble("refreshRate"));
-        video = dev.androidstream.root.VideoCodecs.nativeDisplay(geometry.getInt("width"), geometry.getInt("height"), displayRate);
+        video = dev.androidstream.root.VideoCodecs.nativeDisplay(geometry.getInt("width"), geometry.getInt("height"), displayRate, codecName);
         fps = video.fps();
         width = video.width(); height = video.height();
     }
@@ -46,7 +46,7 @@ final class RtcSession implements AutoCloseable {
     void initialize(Context context, String nativeLibrary) throws Exception {
         // An unset sender max invokes M144's 2.5 Mbps resolution default, not an unlimited budget.
         // Query the same hardware encoder as Root and use its declared bitrate range.
-        android.util.Range<Integer> bitrateRange = video.codec().getCapabilitiesForType("video/avc").getVideoCapabilities().getBitrateRange();
+        android.util.Range<Integer> bitrateRange = video.codec().getCapabilitiesForType(video.mime()).getVideoCapabilities().getBitrateRange();
         int startBitrate = VideoPolicy.startBitrate(bitrateRange.getLower(), bitrateRange.getUpper());
         int maxBitrate = VideoPolicy.maxBitrate(bitrateRange.getLower(), bitrateRange.getUpper());
         initializeRuntime(context, nativeLibrary);
@@ -60,12 +60,19 @@ final class RtcSession implements AutoCloseable {
         factory = PeerConnectionFactory.builder().setOptions(options).setFieldTrials("WebRTC-FrameDropper/Disabled/"
                 + "WebRTC-ProbingScreenshareBwe/1.5,40,80,40,-60,3/").setVideoEncoderFactory(new VideoEncoderFactory() {
             @Override public VideoEncoder createEncoder(VideoCodecInfo info) {
-                if (!info.name.equalsIgnoreCase("H264")) return null;
+                if (!info.name.equalsIgnoreCase(video.codecName())) return null;
                 encoder = new RootVideoEncoder(root, source, video, events::error); return encoder;
             }
             @Override public VideoCodecInfo[] getSupportedCodecs() {
-                return new VideoCodecInfo[]{new VideoCodecInfo("H264", Map.of(
-                        "level-asymmetry-allowed", "1", "packetization-mode", "1", "profile-level-id", video.profileLevelId()), List.of())};
+                if ("H264".equals(video.codecName()))
+                    return new VideoCodecInfo[]{new VideoCodecInfo("H264", Map.of("level-asymmetry-allowed", "1",
+                            "packetization-mode", "1", "profile-level-id", video.profileLevelId()), List.of())};
+                if ("H265".equals(video.codecName()))
+                    return new VideoCodecInfo[]{new VideoCodecInfo("H265", Map.of("profile-id", "1",
+                            "level-id", Integer.toString(video.levelIdc()), "tx-mode", "SRST"), List.of())};
+                return new VideoCodecInfo[]{new VideoCodecInfo("AV1", Map.of("profile", "0", "level-idx",
+                        Integer.toString(Math.max(0, dev.androidstream.root.VideoCodecs.av1LevelIndex(video.codecLevel()))),
+                        "tier", "0"), List.of())};
             }
         }).createPeerConnectionFactory();
         // Root packet lookup uses the original capture timestamp; don't realign it in JNI.
@@ -178,7 +185,11 @@ final class RtcSession implements AutoCloseable {
                     remoteCandidates.clear();
                     peer.createAnswer(new SdpAdapter(events) {
                     @Override public void onCreateSuccess(SessionDescription answer) {
-                        if (!VideoPolicy.answerSupportsLevel(answer.description, video.levelIdc())) {
+                        if (!VideoPolicy.answerSupportsCodec(answer.description, video.codecName())) {
+                            events.error("客户端未协商手机所选的 " + video.codecName() + " 视频编码");
+                            return;
+                        }
+                        if ("H264".equals(video.codecName()) && !VideoPolicy.answerSupportsLevel(answer.description, video.levelIdc())) {
                             events.error("浏览器协商的 H.264 Level 不支持手机原生规格，请检查浏览器兼容性");
                             return;
                         }

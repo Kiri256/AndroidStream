@@ -29,7 +29,7 @@ public final class MainActivity extends Activity {
         LinearLayout box = new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(36, 48, 36, 36);
         ScrollView scroll = new ScrollView(this); scroll.addView(box); setContentView(scroll);
         TextView title = new TextView(this); title.setText("AndroidStream · 实机测试版"); title.setTextSize(25); box.addView(title);
-        TextView intro = new TextView(this); intro.setText("局域网浏览器控制 · Root · 硬件 H.264\n音频为系统内部播放，不采集麦克风。\n"); box.addView(intro);
+        TextView intro = new TextView(this); intro.setText("局域网控制 · Root · H.264 / Windows H.265\n音频为系统内部播放，不采集麦克风。\n"); box.addView(intro);
         state = new TextView(this); state.setTextSize(17); state.setTextIsSelectable(true); box.addView(state);
         start = button(box, "启动服务", () -> {
             if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)

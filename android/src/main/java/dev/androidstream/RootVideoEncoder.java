@@ -7,13 +7,14 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.*;
 import java.util.concurrent.locks.LockSupport;
 
-/** Adapts encoded root-process H.264 to WebRTC; no second video encoding. */
+/** Adapts encoded root-process H.264/H.265 to WebRTC; no second video encoding. */
 final class RootVideoEncoder implements VideoEncoder {
     private final CaptureBackend root;
     private final VideoSource source;
     private final int width, height;
     private final float fps;
     private final String codecName;
+    private final String videoCodec;
     private final long frameIntervalNs;
     private final java.util.function.Consumer<String> failure;
     private volatile Callback callback;
@@ -29,7 +30,7 @@ final class RootVideoEncoder implements VideoEncoder {
     RootVideoEncoder(CaptureBackend root, VideoSource source, dev.androidstream.root.VideoCodecs.Selection video,
                      java.util.function.Consumer<String> failure) {
         this.root = root; this.source = source; width = video.width(); height = video.height();
-        fps = video.fps(); codecName = video.codec().getName(); frameIntervalNs = VideoPolicy.frameIntervalNs(fps);
+        fps = video.fps(); codecName = video.codec().getName(); videoCodec = video.codecName(); frameIntervalNs = VideoPolicy.frameIntervalNs(fps);
         this.failure = failure;
     }
     boolean started() { return callback != null; }
@@ -41,7 +42,7 @@ final class RootVideoEncoder implements VideoEncoder {
             delivery.execute(this::deliver);
             targetBitrate = VideoPolicy.initialBitrate(s.startBitrate);
             root.command(new JSONObject().put("type", "start").put("width", width).put("height", height)
-                    .put("fps", fps).put("bitrate", targetBitrate).put("codec", codecName));
+                    .put("fps", fps).put("bitrate", targetBitrate).put("codec", codecName).put("videoCodec", videoCodec));
         } catch (Exception e) { release(); failure.accept("视频编码初始化失败"); return VideoCodecStatus.ERROR; }
         return VideoCodecStatus.OK;
     }
@@ -107,7 +108,13 @@ final class RootVideoEncoder implements VideoEncoder {
         EncodedImage image = EncodedImage.builder().setBuffer(buffer.slice(), () -> buffers.recycle(buffer)).setEncodedWidth(width).setEncodedHeight(height)
                 .setCaptureTimeNs(frame.getTimestampNs()).setRotation(0)
                 .setFrameType(packet.key() ? EncodedImage.FrameType.VideoFrameKey : EncodedImage.FrameType.VideoFrameDelta).createEncodedImage();
-        try { target.onEncodedFrame(image, new CodecSpecificInfoH264()); } finally { image.release(); }
+        try {
+            VideoEncoder.CodecSpecificInfo codecInfo = "H265".equals(videoCodec)
+                    ? new VideoEncoder.CodecSpecificInfoH265()
+                    : "AV1".equals(videoCodec) ? new VideoEncoder.CodecSpecificInfoAV1()
+                    : new VideoEncoder.CodecSpecificInfoH264();
+            target.onEncodedFrame(image, codecInfo);
+        } finally { image.release(); }
         return VideoCodecStatus.OK;
     }
     @Override public synchronized VideoCodecStatus release() {
@@ -127,7 +134,7 @@ final class RootVideoEncoder implements VideoEncoder {
         return VideoCodecStatus.OK;
     }
     @Override public ScalingSettings getScalingSettings() { return ScalingSettings.OFF; }
-    @Override public String getImplementationName() { return "Root-MediaCodec-Surface-H264"; }
+    @Override public String getImplementationName() { return "Root-MediaCodec-Surface-" + videoCodec; }
     @Override public boolean isHardwareEncoder() { return true; }
     private synchronized void requestKey() {
         long now = android.os.SystemClock.elapsedRealtime();

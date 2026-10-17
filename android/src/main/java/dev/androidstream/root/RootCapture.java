@@ -27,6 +27,7 @@ public final class RootCapture implements CaptureBackend, AutoCloseable {
     private final DisplayMode displayMode;
     private volatile int generation = 1;
     private volatile boolean running = true, capturing;
+    private volatile boolean videoStarted, videoCandidateFound;
     private final Object inputLock = new Object();
     private volatile int requestedBitrate;
     private final java.util.concurrent.atomic.AtomicBoolean keyframeRequested = new java.util.concurrent.atomic.AtomicBoolean();
@@ -86,12 +87,13 @@ public final class RootCapture implements CaptureBackend, AutoCloseable {
                             float fps = VideoPolicy.refreshRate(c.getDouble("fps"));
                             int bitrate = c.getInt("bitrate");
                             String codecName = c.getString("codec");
+                            String videoCodec = c.optString("videoCodec", VideoCodecs.H264);
                             if (w < 1 || h < 1 || bitrate < 100000)
                                 throw new IllegalArgumentException("Invalid codec settings");
                             capturing = true;
                             requestedBitrate = bitrate;
                             keyframeRequested.set(false);
-                            videoThread = new Thread(() -> video(w, h, fps, bitrate, codecName), "root-encoder");
+                            videoThread = new Thread(() -> video(w, h, fps, bitrate, codecName, videoCodec), "root-encoder");
                             videoThread.start();
                             break;
                         case "stopVideo": stopVideo(); input.cancel(); break;
@@ -228,14 +230,33 @@ public final class RootCapture implements CaptureBackend, AutoCloseable {
             audioThread = null;
         }
     }
-    private void video(int width, int height, float fps, int bitrate, String codecName) {
+    private void video(int width, int height, float fps, int bitrate, String codecName, String videoCodec) {
+        java.util.List<String> failures = new java.util.ArrayList<>();
+        for (int ordinal = 0; ordinal < 32; ordinal++) {
+            capturing = true;
+            videoStarted = false;
+            videoCandidateFound = false;
+            try {
+                videoOnce(width, height, fps, bitrate, codecName, videoCodec, ordinal);
+            } catch (Throwable e) {
+                failures.add("候选 " + ordinal + ": " + message(e));
+            }
+            if (videoStarted || !running) return;
+            if (!videoCandidateFound) break;
+            if (failures.size() < ordinal + 1) failures.add("候选 " + ordinal + ": MediaCodec 配置或启动失败");
+        }
+        capturing = false;
+        error("Capture: " + videoCodec + " 所有非软件 Surface 编码器启动失败：" + String.join("; ", failures));
+    }
+    private void videoOnce(int width, int height, float fps, int bitrate, String codecName, String videoCodec, int ordinal) {
+            VideoCodecs.Selection selection = VideoCodecs.selectCandidate(width, height, fps, videoCodec, ordinal);
+            videoCandidateFound = true;
         MediaCodec codec = null;
         Surface surface = null;
         AutoCloseable mirror = null;
         try {
-            VideoCodecs.Selection selection = VideoCodecs.select(width, height, fps, codecName);
             MediaCodecInfo selected = selection.codec();
-            String mime = "video/avc";
+            String mime = selection.mime();
             android.util.Range<Integer> encoderBitrateRange = selected.getCapabilitiesForType(mime).getVideoCapabilities().getBitrateRange();
             codec = MediaCodec.createByCodecName(selected.getName());
             MediaFormat format = MediaFormat.createVideoFormat(mime, width, height);
@@ -247,7 +268,8 @@ public final class RootCapture implements CaptureBackend, AutoCloseable {
             // PLI/loss recovery still requests an IDR immediately when needed.
             format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 5);
             format.setInteger(MediaFormat.KEY_PROFILE, selection.codecProfile());
-            format.setInteger(MediaFormat.KEY_LEVEL, selection.codecLevel());
+            if (VideoCodecs.H264.equals(videoCodec)) format.setInteger(MediaFormat.KEY_LEVEL, selection.h264CodecLevel());
+            else if (selection.codecLevel() != 0) format.setInteger(MediaFormat.KEY_LEVEL, selection.codecLevel());
             format.setInteger(MediaFormat.KEY_MAX_B_FRAMES, 0);
             format.setInteger(MediaFormat.KEY_PRIORITY, 0);
             format.setInteger(MediaFormat.KEY_LATENCY, 1);
@@ -261,6 +283,7 @@ public final class RootCapture implements CaptureBackend, AutoCloseable {
             surface = codec.createInputSurface();
             mirror = display.mirror(surface, width, height, geometry);
             codec.start();
+            videoStarted = true;
             MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
             byte[] config = new byte[0];
             long lastCheck = 0;
@@ -308,7 +331,7 @@ public final class RootCapture implements CaptureBackend, AutoCloseable {
                 }
             }
         } catch (Throwable e) {
-            error("Capture: H.264 Surface 配置失败（" + width + "×" + height + " @ "
+            error("Capture: " + videoCodec + " Surface 配置失败（" + width + "×" + height + " @ "
                     + String.format(java.util.Locale.ROOT, "%.2f", fps) + " Hz，" + codecName + "）：" + message(e));
         }
         finally {

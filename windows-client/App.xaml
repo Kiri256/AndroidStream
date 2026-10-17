@@ -1,0 +1,17 @@
+<Application x:Class="AndroidStream.Client.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml">
+  <Application.Resources>
+    <SolidColorBrush x:Key="PanelBrush" Color="#202426" />
+    <SolidColorBrush x:Key="WindowBrush" Color="#15191B" />
+    <SolidColorBrush x:Key="AccentBrush" Color="#55C6A9" />
+    <Style TargetType="Button">
+      <Setter Property="Padding" Value="12,7" />
+      <Setter Property="Margin" Value="3" />
+      <Setter Property="Foreground" Value="#E7ECEA" />
+      <Setter Property="Background" Value="#30383A" />
+      <Setter Property="BorderBrush" Value="#566163" />
+    </Style>
+  </Application.Resources>
+</Application>

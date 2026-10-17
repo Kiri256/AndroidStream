@@ -100,6 +100,17 @@ public class VideoPolicyTest {
         assertEquals(0, VideoPolicy.levelIdc(0));
         assertEquals(0, VideoPolicy.levelIdc(512 | 0x40000000));
     }
+    @Test public void hevcMainTierLevelsMapToRfc7798LevelIds() {
+        assertEquals(153, VideoPolicy.hevcMainLevelIdc(65536));
+        assertEquals(186, VideoPolicy.hevcMainLevelIdc(16777216));
+        assertEquals(0, VideoPolicy.hevcMainLevelIdc(131072));
+    }
+    @Test public void av1CodecLevelsMapToRtpLevelIndex() {
+        assertEquals(0, dev.androidstream.root.VideoCodecs.av1LevelIndex(1));
+        assertEquals(8, dev.androidstream.root.VideoCodecs.av1LevelIndex(256));
+        assertEquals(14, dev.androidstream.root.VideoCodecs.av1LevelIndex(16384));
+        assertEquals(-1, dev.androidstream.root.VideoCodecs.av1LevelIndex(0));
+    }
     @Test public void recognizesBaselineAndConstrainedBaselineProfiles() {
         assertTrue(VideoPolicy.h264BaselineProfile(1));
         assertTrue(VideoPolicy.h264BaselineProfile(65536));
@@ -113,5 +124,12 @@ public class VideoPolicyTest {
         assertFalse(VideoPolicy.answerSupportsLevel("m=video 9 UDP/TLS/RTP/SAVPF 96\r\na=fmtp:96 profile-level-id=42e01f\r\n", 52));
         assertFalse(VideoPolicy.answerSupportsLevel("m=video 0 UDP/TLS/RTP/SAVPF 96\r\na=fmtp:96 profile-level-id=42e034\r\n", 52));
         assertFalse(VideoPolicy.answerSupportsLevel("m=audio 9 UDP/TLS/RTP/SAVPF 96\r\na=fmtp:96 profile-level-id=42e034\r\n", 52));
+    }
+    @Test public void negotiatedAnswerMustContainRequestedVideoCodec() {
+        assertTrue(VideoPolicy.answerSupportsCodec("m=video 9 UDP/TLS/RTP/SAVPF 96\r\na=rtpmap:96 H265/90000\r\n", "H265"));
+        assertFalse(VideoPolicy.answerSupportsCodec("m=video 9 UDP/TLS/RTP/SAVPF 96\r\na=rtpmap:96 H264/90000\r\n", "H265"));
+        assertFalse(VideoPolicy.answerSupportsCodec("m=video 0 UDP/TLS/RTP/SAVPF 96\r\na=rtpmap:96 H265/90000\r\n", "H265"));
+        assertFalse(VideoPolicy.answerSupportsCodec("m=audio 9 UDP/TLS/RTP/SAVPF 96\r\na=rtpmap:96 H265/90000\r\n", "H265"));
+        assertTrue(VideoPolicy.answerSupportsCodec("m=video 9 UDP/TLS/RTP/SAVPF 96\r\na=rtpmap:96 AV1/90000\r\n", "AV1"));
     }
 }

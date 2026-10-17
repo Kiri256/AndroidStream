@@ -1,0 +1,44 @@
+<Window x:Class="AndroidStream.Client.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="AndroidStream" Width="1180" Height="780" MinWidth="800" MinHeight="560"
+        Background="{StaticResource WindowBrush}" Foreground="#E7ECEA">
+  <Grid Margin="12">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+    <DockPanel Grid.Row="0" Margin="0,0,0,10">
+      <TextBlock Text="AndroidStream" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,16,0" />
+      <TextBox x:Name="Address" Text="ws://192.168.1.2:8080/ws" MinWidth="300" Padding="8,6" VerticalContentAlignment="Center" />
+      <ComboBox x:Name="Codec" Width="130" Margin="8,0" SelectedIndex="0" VerticalContentAlignment="Center">
+        <ComboBoxItem Content="H.264" Tag="H264" />
+        <ComboBoxItem Content="H.265" Tag="H265" />
+      </ComboBox>
+      <Button x:Name="ConnectButton" Content="连接" Click="ConnectClick" />
+      <Button x:Name="DisconnectButton" Content="断开" Click="DisconnectClick" IsEnabled="False" />
+      <TextBlock x:Name="Status" Text="未连接" VerticalAlignment="Center" Margin="12,0" />
+    </DockPanel>
+    <Border Grid.Row="1" Background="#090B0C" BorderBrush="#353D3F" BorderThickness="1" CornerRadius="3">
+      <Image x:Name="ScreenImage" Stretch="Uniform" Focusable="True"
+             MouseLeftButtonDown="ScreenMouseDown" MouseLeftButtonUp="ScreenMouseUp"
+             MouseMove="ScreenMouseMove" LostMouseCapture="ScreenLostCapture" PreviewMouseWheel="ScreenWheel"
+             KeyDown="ScreenKeyDown" />
+    </Border>
+    <DockPanel Grid.Row="2" Margin="0,10,0,0">
+      <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
+        <Button Content="返回" Tag="4" Click="NavClick" />
+        <Button Content="主页" Tag="3" Click="NavClick" />
+        <Button Content="最近任务" Tag="187" Click="NavClick" />
+        <Button Content="音量 −" Tag="25" Click="NavClick" />
+        <Button Content="音量 ＋" Tag="24" Click="NavClick" />
+        <Button Content="关闭手机屏幕" Click="ScreenPowerClick" />
+        <Button Content="点亮手机屏幕" Click="ScreenPowerClick" Tag="on" />
+        <CheckBox x:Name="AudioEnabled" Content="手机内部音频" VerticalAlignment="Center" Margin="12,0"
+                  Checked="AudioChanged" Unchecked="AudioChanged" />
+      </StackPanel>
+      <TextBlock x:Name="Details" Text="" VerticalAlignment="Center" HorizontalAlignment="Right" />
+    </DockPanel>
+  </Grid>
+</Window>

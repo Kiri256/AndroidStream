@@ -6,6 +6,8 @@ let negotiating = false, candidates = [], mouseMove = null, raf = 0, wheelBusy =
 let mediaGeneration = 0, reconnectTimer, recoveryTimer, watchdogTimer, retryCount = 0;
 let shouldReconnect = true, lastSignal = 0;
 let connectionAttempt = 0, hadConnection = false;
+let selectedCodec = 'H264';
+let phoneCodecs = null;
 let statsTimer, statsState;
 const statsFields = ['bitrate','picture','rtt','loss','decode','buffer'];
 const status = text => { $('status').textContent = text; };
@@ -15,6 +17,24 @@ const syncAudio = () => signal({type:'audio',enabled:$('audio').checked && !docu
 function setConnecting(connecting) {
   $('connect').disabled = connecting;
   $('disconnect').disabled = !connecting;
+  $('video-codec').disabled = connecting;
+}
+const codecMimeTypes = {H264:['video/h264'],H265:['video/h265','video/hevc'],AV1:['video/av1']};
+function supportedCodecs() {
+  const capabilities = RTCRtpReceiver.getCapabilities?.('video')?.codecs ?? [];
+  return Object.fromEntries(Object.entries(codecMimeTypes).map(([name, mimes]) =>
+    [name, capabilities.filter(codec => mimes.includes(codec.mimeType.toLowerCase()))]));
+}
+function updateCodecOptions() {
+  if (!window.RTCPeerConnection || !window.RTCRtpReceiver?.getCapabilities) return;
+  const supported = supportedCodecs();
+  const requested = $('video-codec').value || selectedCodec;
+  if ([...$('video-codec').options].some(option => option.value === requested)) $('video-codec').value = requested;
+  const codec = $('video-codec').value;
+  const missing = [];
+  if (supported[codec].length === 0) missing.push('当前浏览器未声明该编码的 WebRTC 解码能力');
+  if (phoneCodecs !== null && !phoneCodecs.includes(codec)) missing.push('手机当前原生规格未声明该编码的 Surface 硬编能力');
+  $('codec-note').textContent = missing.length ? missing.join('；') : '连接时将检查手机硬编与浏览器解码能力';
 }
 const signal = message => {
   if (['offer','candidate'].includes(message.type)) message.mediaGeneration = mediaGeneration;
@@ -71,6 +91,11 @@ async function connect(automatic = false) {
   cleanup(); fail('');
   const attempt = connectionAttempt;
   if (!window.RTCPeerConnection) { shouldReconnect = false; fail('浏览器不提供 WebRTC，请使用最新版 Chrome / Edge。'); return; }
+  if (automatic !== true) {
+    selectedCodec = $('video-codec').value;
+    phoneCodecs = null;
+    updateCodecOptions();
+  }
   if ($('audio').checked) await enableAudio();
   if (!shouldReconnect || attempt !== connectionAttempt) return;
   ws = new WebSocket(`${location.protocol === 'https:' ? 'wss':'ws'}://${location.host}/ws`); ws.binaryType = 'arraybuffer';
@@ -95,6 +120,8 @@ async function connect(automatic = false) {
           clearMedia();
           mediaGeneration = data.mediaGeneration;
           geometry = data.device;
+          phoneCodecs = Array.isArray(data.videoCodecs) ? data.videoCodecs : null;
+          updateCodecOptions();
           $('screen-power-state').textContent = geometry.screenOff ? '已请求关闭手机屏幕' : '';
           await connectRtc();
           break;
@@ -139,15 +166,16 @@ async function connect(automatic = false) {
   ws.onclose = () => { if (socket === ws) retryConnection($('error').textContent || '正在恢复手机连接'); };
 }
 $('connect').addEventListener('click', connect);
-connect();
+$('video-codec').addEventListener('change', updateCodecOptions);
+updateCodecOptions();
 async function connectRtc() {
   if (negotiating) return; negotiating = true; status('正在建立视频连接');
   pc = new RTCPeerConnection({iceServers:[], bundlePolicy:'max-bundle'});
   const current = pc, epoch = mediaGeneration;
   recoveryTimer = setTimeout(() => { if (current === pc) retryConnection('正在恢复视频连接'); }, 12000);
   const receiver = pc.addTransceiver('video', {direction:'recvonly'});
-  const codecs = RTCRtpReceiver.getCapabilities('video').codecs.filter(c => c.mimeType.toLowerCase() === 'video/h264');
-  if (!codecs.length) throw new Error('浏览器未提供 H.264 解码能力');
+  const codecs = supportedCodecs()[selectedCodec];
+  if (!codecs.length) throw new Error(`浏览器未提供 ${selectedCodec} WebRTC 解码能力`);
   if (receiver.setCodecPreferences) receiver.setCodecPreferences(codecs);
   try { if ('jitterBufferTarget' in receiver.receiver) receiver.receiver.jitterBufferTarget = 0; } catch {}
   control = pc.createDataChannel('control', {ordered:true});
@@ -177,7 +205,7 @@ async function connectRtc() {
   if (current !== pc || epoch !== mediaGeneration) return;
   await current.setLocalDescription(offer);
   if (current !== pc || epoch !== mediaGeneration) return;
-  signal({type:'offer', sdp:current.localDescription.sdp});
+  signal({type:'offer', videoCodec:selectedCodec, sdp:current.localDescription.sdp});
   heartbeatTimer = setInterval(() => send({type:'heartbeat'}), 500);
 
 }

@@ -75,8 +75,12 @@ final class RootSessionServer implements CaptureBackend.Listener, LocalWebServer
         if (drainingSessions == 0) sendReady(client);
     }); }
     private void sendReady(LocalWebServer.Client client) {
-        try { client.text(new JSONObject().put("type", "ready").put("device", info)
-                .put("mediaGeneration", mediaGeneration).toString()); }
+        try {
+            java.util.List<String> videoCodecs = dev.androidstream.root.VideoCodecs.supportedNativeCodecs(
+                    info.getInt("width"), info.getInt("height"), (float) info.getDouble("refreshRate"));
+            client.text(new JSONObject().put("type", "ready").put("device", info).put("videoCodecs", new org.json.JSONArray(videoCodecs))
+                    .put("mediaGeneration", mediaGeneration).toString());
+        }
         catch (Exception e) { send(client, "error", "设备信息错误"); client.closeAfterWrites(); }
     }
     private void reconfigureMedia() throws Exception {
@@ -115,7 +119,8 @@ final class RootSessionServer implements CaptureBackend.Listener, LocalWebServer
                 case "offer":
                     if (rtc != null) { send(c, "error", "会话已存在，请断开后重连"); return; }
                     final int epoch = mediaGeneration;
-                    rtc = new RtcSession(root, info, new RtcSession.Events() {
+                    String videoCodec = j.optString("videoCodec", dev.androidstream.root.VideoCodecs.H264);
+                    rtc = new RtcSession(root, info, videoCodec, new RtcSession.Events() {
                         public void signal(JSONObject signal) {
                             enqueue(() -> {
                                 if (active != c || mediaGeneration != epoch) return;

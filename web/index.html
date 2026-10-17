@@ -2,9 +2,14 @@
 <html lang="zh-CN">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AndroidStream</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
 <body>
-<header><strong>AndroidStream</strong><span>局域网 · 0.1.30-test</span><span id="status" role="status">未连接</span></header>
+<header><strong>AndroidStream</strong><span>局域网 · 0.1.33-test</span><span id="status" role="status">未连接</span></header>
 <main>
 <aside>
+<label for="video-codec">视频编码</label>
+<select id="video-codec" aria-label="视频编码">
+<option value="H264">H.264</option><option value="H265">H.265</option><option value="AV1">AV1</option>
+</select>
+<p id="codec-note" class="stats-note" role="status"></p>
 <button id="connect" type="button">连接手机</button>
 <button id="disconnect" disabled>断开连接</button>
 <div class="nav"><button id="screen-off" disabled>关闭手机屏幕</button><button id="screen-on" disabled>点亮手机屏幕</button></div>
